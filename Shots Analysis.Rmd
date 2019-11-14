@@ -1,0 +1,92 @@
+---
+title: "Shot Exploration"
+output: html_document
+---
+
+
+
+First, let's load in our data. We have files with information on every shot from the 2000 NBA season throughthe 2018 NBA season. 
+
+
+```{r}
+library(pacman)
+p_load(ggplot2, tidyverse)
+
+Shots <- read.csv("C:/Users/Dander09/Dropbox/Sports/ShotsAll.csv")
+
+```
+
+
+Okay, so we all sort of know teams are shooting a ton more threes.  Can we see that in the data? 
+```{r}
+Shots %>% mutate(ThreePointer = ifelse(typeShot == "3PT Field Goal", 1, 0))%>%
+                   group_by(slugSeason) %>% summarise(ThreePointRate = mean(ThreePointer)) %>%
+  head(19)
+```
+
+Yes! It keeps going up, super clear.  Let's show it as a graph:
+```{r}
+Shots %>% mutate(ThreePointer = ifelse(typeShot == "3PT Field Goal", 1, 0),
+                 Season = as.numeric(substr(slugSeason, 1, 4))) %>%
+                   group_by(Season) %>% summarise(ThreePointRate = mean(ThreePointer)*100,
+                                                  NumThrees = sum(ThreePointer),
+                                                  MadeThrees = sum(ThreePointer*isShotMade),
+                                                  ThreePointMakeRate = 100*MadeThrees/NumThrees) %>% 
+                    select(Season, ThreePointRate, ThreePointMakeRate) %>%
+                    gather(key="Outcome", value="value", -Season) %>%
+                    ggplot() +
+                    geom_line(aes(x=Season, y=value, color=Outcome))+
+                    ylim(10,40)+
+                    xlab("Year")+
+                    ylab("Percent")
+  
+```
+
+
+Looks like we are taking a ton more three pointers, but the shooting percentage on threes is staying almost exactly constant. 
+Let's look at point per shot on threes and twos.
+```{r}
+Shots %>% mutate(Points = ifelse(typeShot == "3PT Field Goal", 3, 2),
+                 Season = as.numeric(substr(slugSeason, 1, 4))) %>%
+                   group_by(Season, Points) %>% summarise(Num = n(),
+                                                  Makes = sum(isShotMade)) %>% 
+          mutate(PointsPerShot = Points*Makes/Num)  %>%
+                    select(Season, Points, PointsPerShot) %>%
+                    gather(key="Outcome", value="value", -Season, -Points) %>%
+                    ggplot() +
+                    geom_line(aes(x=Season, y=value, color=as.factor(Points)))+
+                    xlab("Year")+
+                    ylab("Points Per Shot")
+  
+```
+
+
+Now let's look a bit deeper at shot types - not all 2's are the same. Nor are all 3's.
+Let's look at points per shot as a function of distance from the hoop:
+We can see the different types of shots there are:
+```{r}
+Shots %>% select(zoneBasic) %>% table()
+```
+
+
+```{r}
+Shots %>% mutate(Points = ifelse(typeShot == "3PT Field Goal", 3, 2), 
+                 ShotPoints = isShotMade * Points, 
+                 Season = as.numeric(substr(slugSeason, 1, 4))) %>%
+                   group_by(Season, zoneBasic) %>% summarise(PointsPerShot = mean(ShotPoints))%>%
+                 select(Season, zoneBasic, PointsPerShot) %>%
+                 ggplot(aes(x=Season, y=PointsPerShot, color=zoneBasic)) + geom_line()
+```
+It looks like each shot is worth about the same amount of points each year - players aren't getting better or worse at shooting each type of shot, for the most part, they're just changing the types of shots they take. So let's look and see how each type of shot is changing over time. 
+
+```{r}
+Shots %>% mutate(Season = as.numeric(substr(slugSeason, 1, 4))) %>%
+          group_by(Season) %>%
+           count(Season, zoneBasic) %>% 
+          mutate(prop=prop.table(n)) %>% select(Season, zoneBasic, prop) %>%
+          ggplot(aes(x=Season, y=prop, color=zoneBasic)) + geom_line()
+```
+
+Biggest thing:  Mid-Range jumpers are just dying out. Went from almost 40% of shots to under 20%!
+Above the Break 3s are rising from 12.5% to 26%. 
+Slow steady rise in corner threes as well. Shots in the restricted area and in the paint are holding steady. 
